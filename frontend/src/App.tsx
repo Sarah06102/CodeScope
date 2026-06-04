@@ -1,121 +1,171 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+const API_BASE = "http://localhost:3000";
+
+type GraphMeta = {
+  rootDir: string;
+  fileCount: number;
+  errors: Array<{
+    file: string;
+    message: string;
+  }>;
+};
+
+type GraphNode = {
+  id: string;
+  file: string;
+  location: {
+    startLine: number;
+    endLine: number;
+  } | null;
+  calls: string[];
+  calledBy: string[];
+};
+
+type GraphData = {
+  _meta: GraphMeta;
+  [functionName: string]: GraphNode | GraphMeta;
+};
+
+type QueryResult = {
+  question: string;
+  answer: string;
+  result: {
+    name: string;
+    file: string;
+    location: {
+      startLine: number;
+      endLine: number;
+    } | null;
+    calls: string[];
+    calledBy: string[];
+  };
+};
+
+const App = () => {
+  const [question, setQuestion] = useState("what calls parseFile");
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [result, setResult] = useState<QueryResult | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Load graph metadata when the page first opens
+  useEffect(() => {
+    const loadGraph = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/graph`);
+        const data: GraphData = await response.json();
+        setGraphData(data);
+      } catch {
+        setError("Failed to load graph data");
+      }
+    };
+
+    loadGraph();
+  }, []);
+
+  // Send the user's question to the backend query endpoint
+  const runQuery = async () => {
+    setLoading(true);
+    setError("");
+    setResult(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question }),
+      });
+
+      const data: QueryResult | { error?: string } = await response.json();
+
+      if (!response.ok) {
+        setError("error" in data ? data.error || "Query failed" : "Query failed");
+        setLoading(false);
+        return;
+      }
+
+      if ("result" in data) {
+        setResult(data);
+      }
+    } catch {
+      setError("Failed to run query");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Exclude graph metadata when counting tracked functions for the dashboard
+  const functionCount = graphData
+    ? Object.keys(graphData).filter((key) => key !== "_meta").length
+    : 0;
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+    <main className="app-shell">
+      <section className="hero">
+        <p className="eyebrow">Codebase Knowledge Graph</p>
+        <h1>Ask your codebase questions.</h1>
+        <p className="subtitle">
+          Explore function relationships, inspect dependencies, and trace what
+          calls what across your repo.
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>Graph Overview</h2>
+        <p>Tracked functions: {functionCount}</p>
+        <p>Parsed files: {graphData?._meta?.fileCount ?? 0}</p>
+      </section>
+
+      <section className="panel">
+        <h2>Ask a Question</h2>
+        <input
+          type="text"
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="what calls parseFile"
+          className="question-input"
+        />
+        <button onClick={runQuery} disabled={loading} className="query-button">
+          {loading ? "Running..." : "Run Query"}
         </button>
+
+        {error ? <p className="error-text">{error}</p> : null}
       </section>
 
-      <div className="ticks"></div>
+      <section className="panel">
+        <h2>Result</h2>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
+        {!result && !error ? (
+          <p>No query result yet.</p>
+        ) : null}
+
+        {/* Show the backend's answer + the raw function relationship details */}
+        {result ? (
+          <div className="result-card">
+            <p><strong>Question:</strong> {result.question}</p>
+            <p><strong>Answer:</strong> {result.answer}</p>
+            <p><strong>Function:</strong> {result.result.name}</p>
+            <p><strong>File:</strong> {result.result.file}</p>
+            <p>
+              <strong>Lines:</strong>{" "}
+              {result.result.location
+                ? `${result.result.location.startLine}-${result.result.location.endLine}`
+                : "Unknown"}
+            </p>
+            <p><strong>Calls:</strong> {result.result.calls.join(", ") || "None"}</p>
+            <p>
+              <strong>Called By:</strong>{" "}
+              {result.result.calledBy.join(", ") || "None"}
+            </p>
+          </div>
+        ) : null}
       </section>
+    </main>
+  );
+};
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
-}
-
-export default App
+export default App;
